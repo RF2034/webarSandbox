@@ -6,6 +6,7 @@ import * as THREE from 'three';
 export default function ARScene() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isARSupported, setIsARSupported] = useState<boolean | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
 
   useEffect(() => {
@@ -29,7 +30,12 @@ export default function ARScene() {
   const startAR = async () => {
     if (!containerRef.current || !navigator.xr) return;
 
+    setIsLoading(true);
+    setError('');
+
     try {
+      console.log('AR起動開始...');
+
       // Three.jsのセットアップ
       const scene = new THREE.Scene();
 
@@ -68,13 +74,21 @@ export default function ARScene() {
       cube.position.set(0, 0, -1); // カメラから1m前方
       scene.add(cube);
 
-      // WebXR セッションの開始
+      console.log('WebXRセッションをリクエスト中...');
+
+      // WebXR セッションの開始（hit-testをoptionalに変更）
       const session = await navigator.xr.requestSession('immersive-ar', {
-        requiredFeatures: ['hit-test'],
-        optionalFeatures: ['dom-overlay'],
+        requiredFeatures: [],
+        optionalFeatures: ['hit-test', 'dom-overlay'],
       });
 
+      console.log('WebXRセッション作成成功');
+
       await renderer.xr.setSession(session);
+
+      console.log('レンダラーにセッションを設定完了');
+
+      setIsLoading(false);
 
       // アニメーションループ
       const animate = () => {
@@ -89,15 +103,20 @@ export default function ARScene() {
 
       animate();
 
+      console.log('ARシーン起動完了');
+
       // セッション終了時のクリーンアップ
       session.addEventListener('end', () => {
+        console.log('ARセッション終了');
         renderer.setAnimationLoop(null);
+        setIsLoading(false);
         if (containerRef.current) {
           containerRef.current.innerHTML = '';
         }
       });
     } catch (err) {
       console.error('AR起動エラー:', err);
+      setIsLoading(false);
       setError(
         `AR起動に失敗しました: ${err instanceof Error ? err.message : String(err)}`
       );
@@ -108,12 +127,14 @@ export default function ARScene() {
     <div className="relative w-full h-full">
       <div ref={containerRef} className="w-full h-full" />
 
+      {/* ARサポート確認中 */}
       {isARSupported === null && (
         <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
           <p className="text-white text-lg">ARサポートを確認中...</p>
         </div>
       )}
 
+      {/* AR非対応 */}
       {isARSupported === false && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black bg-opacity-75 p-4">
           <p className="text-white text-lg mb-4 text-center">
@@ -128,7 +149,35 @@ export default function ARScene() {
         </div>
       )}
 
-      {isARSupported === true && (
+      {/* AR読み込み中 */}
+      {isLoading && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black bg-opacity-75">
+          <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-500 mb-4"></div>
+          <p className="text-white text-lg">ARを起動中...</p>
+          <p className="text-gray-300 text-sm mt-2">
+            カメラへのアクセスを許可してください
+          </p>
+        </div>
+      )}
+
+      {/* エラー表示 */}
+      {error && !isLoading && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black bg-opacity-75 p-4">
+          <p className="text-red-400 text-lg mb-4 text-center">エラーが発生しました</p>
+          <p className="text-white text-sm text-center mb-4">{error}</p>
+          <button
+            onClick={() => {
+              setError('');
+            }}
+            className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-6 rounded-full"
+          >
+            閉じる
+          </button>
+        </div>
+      )}
+
+      {/* ARを開始ボタン */}
+      {isARSupported === true && !isLoading && !error && (
         <div className="absolute bottom-8 left-0 right-0 flex justify-center">
           <button
             onClick={startAR}
