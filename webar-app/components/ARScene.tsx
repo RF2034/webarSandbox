@@ -1,0 +1,143 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+import * as THREE from 'three';
+
+export default function ARScene() {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isARSupported, setIsARSupported] = useState<boolean | null>(null);
+  const [error, setError] = useState<string>('');
+
+  useEffect(() => {
+    // WebXR AR対応チェック
+    if (typeof navigator !== 'undefined' && 'xr' in navigator) {
+      navigator.xr
+        ?.isSessionSupported('immersive-ar')
+        .then((supported) => {
+          setIsARSupported(supported);
+        })
+        .catch(() => {
+          setIsARSupported(false);
+          setError('WebXR APIの確認に失敗しました');
+        });
+    } else {
+      setIsARSupported(false);
+      setError('このブラウザはWebXRに対応していません');
+    }
+  }, []);
+
+  const startAR = async () => {
+    if (!containerRef.current || !navigator.xr) return;
+
+    try {
+      // Three.jsのセットアップ
+      const scene = new THREE.Scene();
+
+      // カメラ
+      const camera = new THREE.PerspectiveCamera(
+        70,
+        window.innerWidth / window.innerHeight,
+        0.01,
+        20
+      );
+
+      // レンダラー
+      const renderer = new THREE.WebGLRenderer({
+        alpha: true,
+        antialias: true,
+      });
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.xr.enabled = true;
+
+      containerRef.current.appendChild(renderer.domElement);
+
+      // ライト
+      const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+      light.position.set(0, 1, 0);
+      scene.add(light);
+
+      // 3Dオブジェクト（キューブ）
+      const geometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+      const material = new THREE.MeshStandardMaterial({
+        color: 0x00ff00,
+        metalness: 0.5,
+        roughness: 0.5,
+      });
+      const cube = new THREE.Mesh(geometry, material);
+      cube.position.set(0, 0, -1); // カメラから1m前方
+      scene.add(cube);
+
+      // WebXR セッションの開始
+      const session = await navigator.xr.requestSession('immersive-ar', {
+        requiredFeatures: ['hit-test'],
+        optionalFeatures: ['dom-overlay'],
+      });
+
+      await renderer.xr.setSession(session);
+
+      // アニメーションループ
+      const animate = () => {
+        renderer.setAnimationLoop(() => {
+          // キューブを回転
+          cube.rotation.x += 0.01;
+          cube.rotation.y += 0.01;
+
+          renderer.render(scene, camera);
+        });
+      };
+
+      animate();
+
+      // セッション終了時のクリーンアップ
+      session.addEventListener('end', () => {
+        renderer.setAnimationLoop(null);
+        if (containerRef.current) {
+          containerRef.current.innerHTML = '';
+        }
+      });
+    } catch (err) {
+      console.error('AR起動エラー:', err);
+      setError(
+        `AR起動に失敗しました: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  };
+
+  return (
+    <div className="relative w-full h-full">
+      <div ref={containerRef} className="w-full h-full" />
+
+      {isARSupported === null && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
+          <p className="text-white text-lg">ARサポートを確認中...</p>
+        </div>
+      )}
+
+      {isARSupported === false && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black bg-opacity-75 p-4">
+          <p className="text-white text-lg mb-4 text-center">
+            このデバイスはWebXR ARに対応していません
+          </p>
+          {error && (
+            <p className="text-red-400 text-sm text-center">{error}</p>
+          )}
+          <p className="text-gray-300 text-sm mt-4 text-center">
+            ARに対応したAndroidまたはiOSデバイスでアクセスしてください
+          </p>
+        </div>
+      )}
+
+      {isARSupported === true && (
+        <div className="absolute bottom-8 left-0 right-0 flex justify-center">
+          <button
+            onClick={startAR}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded-full shadow-lg transition-colors"
+          >
+            ARを開始
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
