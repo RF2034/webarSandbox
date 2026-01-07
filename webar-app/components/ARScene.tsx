@@ -79,29 +79,36 @@ export default function ARScene() {
       // WebXR セッションの開始（hit-testをoptionalに変更）
       const session = await navigator.xr.requestSession('immersive-ar', {
         requiredFeatures: [],
-        optionalFeatures: ['hit-test', 'dom-overlay'],
+        optionalFeatures: ['hit-test', 'dom-overlay', 'local-floor'],
       });
 
       console.log('WebXRセッション作成成功');
 
+      // Reference Spaceの取得（local-floorを優先、フォールバックでlocal）
+      let referenceSpace: XRReferenceSpace;
+      try {
+        referenceSpace = await session.requestReferenceSpace('local-floor');
+        console.log('local-floor参照空間を使用');
+      } catch {
+        referenceSpace = await session.requestReferenceSpace('local');
+        console.log('local参照空間を使用（フォールバック）');
+      }
+
       await renderer.xr.setSession(session);
+      await renderer.xr.setReferenceSpace(referenceSpace);
 
       console.log('レンダラーにセッションを設定完了');
 
       setIsLoading(false);
 
       // アニメーションループ
-      const animate = () => {
-        renderer.setAnimationLoop(() => {
-          // キューブを回転
-          cube.rotation.x += 0.01;
-          cube.rotation.y += 0.01;
+      renderer.setAnimationLoop(() => {
+        // キューブを回転
+        cube.rotation.x += 0.01;
+        cube.rotation.y += 0.01;
 
-          renderer.render(scene, camera);
-        });
-      };
-
-      animate();
+        renderer.render(scene, camera);
+      });
 
       console.log('ARシーン起動完了');
 
