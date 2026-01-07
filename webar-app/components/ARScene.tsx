@@ -59,20 +59,74 @@ export default function ARScene() {
       containerRef.current.appendChild(renderer.domElement);
 
       // ライト
-      const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
-      light.position.set(0, 1, 0);
+      const light = new THREE.AmbientLight(0xffffff, 0.8);
       scene.add(light);
 
-      // 3Dオブジェクト（キューブ）
-      const geometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
-      const material = new THREE.MeshStandardMaterial({
-        color: 0x00ff00,
-        metalness: 0.5,
-        roughness: 0.5,
-      });
-      const cube = new THREE.Mesh(geometry, material);
-      cube.position.set(0, 0, -1); // カメラから1m前方
-      scene.add(cube);
+      // Matrix風の文字セット
+      const characters = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ!@#$%^&*()_+-=[]{}|;:,.<>?';
+
+      // 文字の雨を生成
+      const rainDrops: Array<{
+        mesh: THREE.Sprite;
+        velocity: number;
+        resetY: number;
+      }> = [];
+
+      const createTextSprite = (char: string) => {
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        if (!context) return null;
+
+        canvas.width = 64;
+        canvas.height = 64;
+
+        // 背景を透明に
+        context.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Matrix風の緑色テキスト
+        context.font = 'Bold 48px monospace';
+        context.fillStyle = '#00ff00';
+        context.textAlign = 'center';
+        context.textBaseline = 'middle';
+        context.fillText(char, 32, 32);
+
+        // テクスチャとして使用
+        const texture = new THREE.CanvasTexture(canvas);
+        const material = new THREE.SpriteMaterial({
+          map: texture,
+          transparent: true,
+        });
+
+        return new THREE.Sprite(material);
+      };
+
+      // 50-80文字をランダムに生成
+      const numChars = Math.floor(Math.random() * 31) + 50; // 50-80
+
+      for (let i = 0; i < numChars; i++) {
+        const char = characters[Math.floor(Math.random() * characters.length)];
+        const sprite = createTextSprite(char);
+
+        if (sprite) {
+          // ユーザーの周囲360度に配置
+          const angle = Math.random() * Math.PI * 2; // 0-360度
+          const radius = Math.random() * 2 + 1; // 1-3m
+          const x = Math.cos(angle) * radius;
+          const z = Math.sin(angle) * radius;
+          const y = Math.random() * 3 + 2; // 2-5mの高さからスタート
+
+          sprite.position.set(x, y, z);
+          sprite.scale.set(0.3, 0.3, 1); // サイズ
+
+          scene.add(sprite);
+
+          rainDrops.push({
+            mesh: sprite,
+            velocity: Math.random() * 0.01 + 0.005, // 落下速度 0.005-0.015
+            resetY: y + 5, // リセット時の高さ
+          });
+        }
+      }
 
       console.log('WebXRセッションをリクエスト中...');
 
@@ -103,9 +157,25 @@ export default function ARScene() {
 
       // アニメーションループ
       renderer.setAnimationLoop(() => {
-        // キューブを回転
-        cube.rotation.x += 0.01;
-        cube.rotation.y += 0.01;
+        // 文字の雨アニメーション
+        rainDrops.forEach((drop) => {
+          // 下に移動
+          drop.mesh.position.y -= drop.velocity;
+
+          // 地面（y = 0）より下に落ちたらリセット
+          if (drop.mesh.position.y < 0) {
+            drop.mesh.position.y = drop.resetY;
+            // 新しい文字に変更
+            const newChar = characters[Math.floor(Math.random() * characters.length)];
+            const newSprite = createTextSprite(newChar);
+            if (newSprite) {
+              drop.mesh.material = (newSprite as THREE.Sprite).material;
+            }
+          }
+
+          // カメラの方向を向く（ビルボード効果）
+          drop.mesh.lookAt(camera.position);
+        });
 
         renderer.render(scene, camera);
       });
