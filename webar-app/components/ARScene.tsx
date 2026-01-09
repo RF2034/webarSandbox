@@ -70,25 +70,41 @@ export default function ARScene() {
         mesh: THREE.Sprite;
         velocity: number;
         resetY: number;
+        initialAngle: number;
+        initialRadius: number;
       }> = [];
 
-      const createTextSprite = (char: string) => {
+      // 縦書き文字列スプライトを作成
+      const createVerticalTextSprite = () => {
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
         if (!context) return null;
 
         canvas.width = 64;
-        canvas.height = 64;
+        canvas.height = 256; // 縦長のキャンバス
 
         // 背景を透明に
         context.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Matrix風の緑色テキスト
-        context.font = 'Bold 48px monospace';
+        // ランダムな4～6文字の文字列を生成
+        const stringLength = Math.floor(Math.random() * 3) + 4; // 4-6文字
+        let textString = '';
+        for (let i = 0; i < stringLength; i++) {
+          textString += characters[Math.floor(Math.random() * characters.length)];
+        }
+
+        // Matrix風の緑色テキスト（縦書き）
+        context.font = 'Bold 36px monospace';
         context.fillStyle = '#00ff00';
         context.textAlign = 'center';
-        context.textBaseline = 'middle';
-        context.fillText(char, 32, 32);
+        context.textBaseline = 'top';
+
+        const charWidth = 32;
+        let y = 10;
+        for (let i = 0; i < textString.length; i++) {
+          context.fillText(textString[i], 32, y);
+          y += 40; // 文字間のスペース
+        }
 
         // テクスチャとして使用
         const texture = new THREE.CanvasTexture(canvas);
@@ -100,30 +116,32 @@ export default function ARScene() {
         return new THREE.Sprite(material);
       };
 
-      // 50-80文字をランダムに生成
-      const numChars = Math.floor(Math.random() * 31) + 50; // 50-80
+      // 20～30の文字列をランダムに生成
+      const numStrings = Math.floor(Math.random() * 11) + 20; // 20-30
 
-      for (let i = 0; i < numChars; i++) {
-        const char = characters[Math.floor(Math.random() * characters.length)];
-        const sprite = createTextSprite(char);
+      for (let i = 0; i < numStrings; i++) {
+        const sprite = createVerticalTextSprite();
 
         if (sprite) {
           // ユーザーの周囲360度に配置
           const angle = Math.random() * Math.PI * 2; // 0-360度
           const radius = Math.random() * 2 + 1; // 1-3m
-          const x = Math.cos(angle) * radius;
-          const z = Math.sin(angle) * radius;
-          const y = Math.random() * 3 + 2; // 2-5mの高さからスタート
 
-          sprite.position.set(x, y, z);
-          sprite.scale.set(0.3, 0.3, 1); // サイズ
+          sprite.position.set(
+            Math.cos(angle) * radius,
+            Math.random() * 3 + 2, // 2-5mの高さからスタート
+            Math.sin(angle) * radius
+          );
+          sprite.scale.set(0.5, 1.2, 1); // 縦長スケール
 
           scene.add(sprite);
 
           rainDrops.push({
             mesh: sprite,
             velocity: Math.random() * 0.01 + 0.005, // 落下速度 0.005-0.015
-            resetY: y + 5, // リセット時の高さ
+            resetY: sprite.position.y + 5,
+            initialAngle: angle,
+            initialRadius: radius,
           });
         }
       }
@@ -157,6 +175,9 @@ export default function ARScene() {
 
       // アニメーションループ
       renderer.setAnimationLoop(() => {
+        // カメラの現在位置（ユーザーの位置）
+        const cameraPos = camera.position;
+
         // 文字の雨アニメーション
         rainDrops.forEach((drop) => {
           // 下に移動
@@ -165,13 +186,15 @@ export default function ARScene() {
           // 地面（y = 0）より下に落ちたらリセット
           if (drop.mesh.position.y < 0) {
             drop.mesh.position.y = drop.resetY;
-            // 新しい文字に変更
-            const newChar = characters[Math.floor(Math.random() * characters.length)];
-            const newSprite = createTextSprite(newChar);
-            if (newSprite) {
-              drop.mesh.material = (newSprite as THREE.Sprite).material;
-            }
           }
+
+          // ユーザーの周囲に文字列を常に配置し直す
+          // カメラを中心とした相対位置を計算
+          const x = cameraPos.x + Math.cos(drop.initialAngle) * drop.initialRadius;
+          const z = cameraPos.z + Math.sin(drop.initialAngle) * drop.initialRadius;
+
+          drop.mesh.position.x = x;
+          drop.mesh.position.z = z;
 
           // カメラの方向を向く（ビルボード効果）
           drop.mesh.lookAt(camera.position);
